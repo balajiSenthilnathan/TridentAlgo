@@ -1,8 +1,9 @@
 package com.trident.trident_algo;
 
-import com.trident.trident_algo.websocket.client.AbstractBinanceWebSocketClient;
+import com.trident.trident_algo.websocket.client.BinanceFutureWebSocketClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -10,24 +11,23 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 @SpringBootApplication
 public class TridentAlgoApplication implements CommandLineRunner {
 
-	private final AbstractBinanceWebSocketClient binanceFutureWebSocketClient;
-	private final AbstractBinanceWebSocketClient binanceAPIWebSocketClient;
+    private final BinanceFutureWebSocketClient binanceFutureWebSocketClient;
 
-	@Autowired
-	public TridentAlgoApplication(
-			@Qualifier("binanceFutureWebSocket") AbstractBinanceWebSocketClient binanceFutureWebSocketClient,
-			@Qualifier("binanceAPIWebSocket") AbstractBinanceWebSocketClient binanceAPIWebSocketClient) {
-		this.binanceFutureWebSocketClient = binanceFutureWebSocketClient;
-		this.binanceAPIWebSocketClient = binanceAPIWebSocketClient;
-	}
+    @Value("${binance.websocket.enable}:false")
+    private String binanceWebSocketEnabled;
 
-	public static void main(String[] args) {
-		SpringApplication.run(TridentAlgoApplication.class, args);
-	}
+    public TridentAlgoApplication(
+            @Autowired(required = false) @Qualifier("binanceFutureWebSocket") BinanceFutureWebSocketClient binanceFutureWebSocketClient) {
+        this.binanceFutureWebSocketClient = binanceFutureWebSocketClient;
+    }
 
-	@Override
-	public void run(String... args) throws Exception {
-		binanceFutureWebSocketClient.connect();
-		binanceAPIWebSocketClient.connect();
-	}
+    public static void main(String[] args) {
+        SpringApplication.run(TridentAlgoApplication.class, args);
+    }
+
+    @Override
+    public void run(String... args) throws Exception {
+        if ("true".equals(binanceWebSocketEnabled))
+            binanceFutureWebSocketClient.connect(null).subscribe();
+    }
 }

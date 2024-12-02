@@ -1,5 +1,6 @@
 package com.trident.trident_algo.api.helper;
 
+import lombok.Getter;
 import org.apache.commons.codec.binary.Hex;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -16,14 +17,21 @@ import java.util.stream.Collectors;
 public class BinanceSignatureHelper {
 
     private static String secretKey;
+    @Getter
+    private static String apiKey;
 
     @Value("${binance.secret.key}")
     public void setSecretKey(String key) {
         secretKey = key;
     }
 
-    public static List<String> getHmacSha256Signature(Map<String, String> queryParams) throws Exception {
-        String queryString = getQueryString(queryParams);
+    @Value("${binance.api.key}")
+    public void setApiKeyKey(String key) {
+        apiKey = key;
+    }
+
+    public static List<String> getHmacSha256Signature(Map<String, Object> queryParams, Long serverTimeStamp) throws Exception {
+        String queryString = getQueryString(queryParams, serverTimeStamp);
         Mac mac = Mac.getInstance("HmacSHA256");
         SecretKeySpec secretKeySpec = new SecretKeySpec(secretKey.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
         mac.init(secretKeySpec);
@@ -31,12 +39,14 @@ public class BinanceSignatureHelper {
         return Arrays.asList(Hex.encodeHexString(hash), queryString);
     }
 
-    private static String  getQueryString(Map<String, String> queryParams) throws Exception {
-        queryParams.put("timestamp", String.valueOf(System.currentTimeMillis()));
+    private static String  getQueryString(Map<String, Object> queryParams,Long serverTimeStamp) throws Exception {
+        queryParams.put("timestamp", serverTimeStamp); //String.valueOf(System.currentTimeMillis()));
+        queryParams.put("recvWindow", 60000);
 
         return queryParams.entrySet().stream()
                 .map(entry -> entry.getKey() + "=" + entry.getValue())
                 .collect(Collectors.joining("&"));
 
     }
+
 }

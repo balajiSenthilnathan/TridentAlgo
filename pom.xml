@@ -64,6 +64,11 @@
 			<artifactId>spring-boot-starter-websocket</artifactId>
 		</dependency>
 
+		<dependency>
+			<groupId>io.projectreactor.netty</groupId>
+			<artifactId>reactor-netty</artifactId>
+		</dependency>
+
 		<!-- Session -->
 		<dependency>
 			<groupId>org.springframework.session</groupId>

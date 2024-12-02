@@ -11,7 +11,7 @@
         <file>logs/trident-algo-app.log</file>
         <immediateFlush>true</immediateFlush>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>logs/app-%d{yyyy-MM-dd}.log</fileNamePattern>
+            <fileNamePattern>logs/trident-algo-app-backup-%d{yyyy-MM-dd}.log</fileNamePattern>
             <maxHistory>3000</maxHistory>
         </rollingPolicy>
         <encoder>
