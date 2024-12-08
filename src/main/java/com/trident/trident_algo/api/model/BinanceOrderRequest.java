@@ -16,8 +16,6 @@ public class BinanceOrderRequest {
     private  String quantity;
     private  String price;
     private  String timeInForce;
-    private int spreadPercent;
-    private int maxOrdersPerSecond;
-    private int step;
+    private  OrderRequestModifiers modifiers;
 
 }

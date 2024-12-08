@@ -1,6 +1,7 @@
 package com.trident.trident_algo.websocket.service;
 
 import com.trident.trident_algo.api.helper.BinanceSignatureHelper;
+import com.trident.trident_algo.api.helper.CommonServiceHelper;
 import com.trident.trident_algo.bot.helper.BinanceAPIBotLogicHelper;
 import com.trident.trident_algo.websocket.client.BinanceAPIWebSocketClient;
 import com.trident.trident_algo.websocket.model.BinanceAPIWebSocketRequest;
@@ -14,6 +15,9 @@ import reactor.core.publisher.Mono;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.stream.IntStream;
+
+import static com.trident.trident_algo.api.helper.BinanceSignatureHelper.getHmacSha256Signature;
 
 @ConditionalOnProperty(name = "binance.websocket.enable", havingValue = "true")
 @Service
@@ -34,6 +38,7 @@ public class BinanceWebSocketAPIService {
         Instant startInstant = Instant.now();
 
         List<String> signatureComposite;
+        List<Map<String, Object>> orderRequestList = new ArrayList<>();
 
         Map<String, Object> orderRequest = new HashMap<>();
         orderRequest.put("id", UUID.randomUUID()); // Unique ID
@@ -45,24 +50,40 @@ public class BinanceWebSocketAPIService {
         params.put("symbol", request.getParams().getSymbol());
         params.put("side", request.getParams().getSide());
         params.put("type", request.getParams().getType());
-
-        params.put("positionSide", request.getParams().getPositionSide());
+        //params.put("positionSide", request.getParams().getPositionSide());
         params.put("quantity", request.getParams().getQuantity());
+        params.put("apiKey", BinanceSignatureHelper.getApiKey());
 
-        if("LIMIT".equals(request.getParams().getType())) {
-            params.put("price", getRevisedPrice(request.getParams().getSide(),
-                    request.getParams().getPrice(), request.getSpreadPercent()));
+        if ("LIMIT".equals(request.getParams().getType())) {
             params.put("timeInForce", request.getParams().getTimeInForce());
+            IntStream.rangeClosed(1, request.getStep())
+                    .forEach(stepValue -> {
+                        params.put("price", getRevisedPrice(
+                                request.getParams().getSide(),
+                                request.getParams().getPrice(),
+                                request.getSpreadPercent(),
+                                stepValue));
+                        List<String> limitSignatureComposite = null;//etServerTime().block());
+                        try {
+                            limitSignatureComposite = getHmacSha256Signature(params, System.currentTimeMillis());
+                            params.put("signature", limitSignatureComposite.get(0));
+                            orderRequest.put("params", params);
+                            orderRequestList.add(CommonServiceHelper.deepCopy(orderRequest));
+
+                        } catch (Exception e) {
+                            throw new RuntimeException(e);
+                        }
+
+                    });
+        } else {
+            signatureComposite = getHmacSha256Signature(params, serverTime);
+            params.put("signature", signatureComposite.get(0));
+            orderRequest.put("params", params);
+            orderRequestList.add(CommonServiceHelper.deepCopy(orderRequest));
         }
 
-        params.put("apiKey", BinanceSignatureHelper.getApiKey());
-        signatureComposite = BinanceSignatureHelper.getHmacSha256Signature(params, serverTime);
-        params.put("signature", signatureComposite.get(0));
-
-        orderRequest.put("params", params);
-
         //WEBSOCKET
-        binanceAPIWebSocketClient.connect(orderRequest)
+        binanceAPIWebSocketClient.connect(orderRequestList, request.getStep(), request.getSpreadPercent())
                 .then(binanceAPIWebSocketClient.disconnect())
                 .subscribe();
 
@@ -72,9 +93,9 @@ public class BinanceWebSocketAPIService {
     }
 
     // Get revised price based on spread
-    private String getRevisedPrice(String side, String price, int spread){
-        Map<String, String> priceComposite = binanceAPIBotLogicHelper.calculatePriceBasedOnSpread(side, price, spread);
-        return Objects.nonNull(priceComposite.get("ERROR")) ?
+    private String getRevisedPrice(String side, String price, int spread, int stepValue){
+        Map<String, String> priceComposite = binanceAPIBotLogicHelper.calculatePriceBasedOnSpread(side, price, spread, stepValue);
+        return Objects.isNull(priceComposite.get("ERROR")) ?
                 priceComposite.get("revisedPrice") : price;
     }
 }

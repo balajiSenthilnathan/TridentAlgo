@@ -1,5 +1,7 @@
 package com.trident.trident_algo.api.config;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -11,6 +13,8 @@ import reactor.core.publisher.Mono;
 @Configuration
 public class WebClientConfiguration {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(WebClientConfiguration.class);
+
     @Value("${binance.api.key}")
     private String apiKey;
 
@@ -20,8 +24,6 @@ public class WebClientConfiguration {
                 .baseUrl("https://fapi.binance.com/fapi/v1/")
                 .defaultHeader("X-MBX-APIKEY", apiKey)
                 .filter(handleErrors())
-                //.defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                //.defaultUriVariables(Collections.singletonMap("url", "http://localhost:8080"))
                 .build();
     }
 
@@ -32,8 +34,15 @@ public class WebClientConfiguration {
                 return clientResponse.bodyToMono(String.class)
                         .flatMap(responseBody -> {
                             // You can parse the response body if necessary
-                            System.out.println(responseBody);
+                            LOGGER.error("ERR : {}", responseBody);
                             return Mono.error(new RuntimeException("400 Bad Request: " + responseBody));
+                        });
+            }else if(clientResponse.statusCode() == HttpStatus.OK){
+                return clientResponse.bodyToMono(String.class)
+                        .flatMap(responseBody -> {
+                            // You can parse the response body if necessary
+                            LOGGER.debug("200 OK : {}", responseBody);
+                            return Mono.just(clientResponse);
                         });
             }
             return Mono.just(clientResponse); // Continue processing the response if no error

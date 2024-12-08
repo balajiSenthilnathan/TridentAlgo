@@ -7,8 +7,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
+@EnableScheduling
 public class TridentAlgoApplication implements CommandLineRunner {
 
     private final BinanceFutureWebSocketClient binanceFutureWebSocketClient;
@@ -27,7 +29,7 @@ public class TridentAlgoApplication implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
-        if ("true".equals(binanceWebSocketEnabled))
-            binanceFutureWebSocketClient.connect(null).subscribe();
+        //if ("true".equals(binanceWebSocketEnabled))
+        //    binanceFutureWebSocketClient.connect().subscribe();
     }
 }

@@ -1,5 +1,6 @@
 package com.trident.trident_algo.websocket.client;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,8 +13,10 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.net.URI;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.IntStream;
 
 public class BinanceAPIWebSocketClient extends AbstractBinanceWebSocketClient {
 
@@ -40,23 +43,32 @@ public class BinanceAPIWebSocketClient extends AbstractBinanceWebSocketClient {
 
 
     @Override
-    public Mono<Void> connect(Map<String, Object> request) {
+    public Mono<Void> connect(List<Map<String, Object>> requestList, int step, int spreadPercent) {
         return client.execute(URI.create(wssURL), session -> {
             sessionRef.set(session);
             LOGGER.info("Connected to Binance WebSocket! {}", wssURL);
 
             try {
                 if (session.isOpen()) {
-                    String binanceAPImessage = mapper.writeValueAsString(request);
-                    Mono<Void> send = session.send(Mono.just(session.textMessage(binanceAPImessage)))
-                            .doOnSuccess(aVoid -> LOGGER.info("Sent: {}", binanceAPImessage))
-                            .doOnError(e -> LOGGER.error("Failed to send message: {}", e.getMessage()));
+                    Flux<Void> loop = Flux.fromStream(IntStream.rangeClosed(1, step).boxed())
+                            .flatMap(i -> {
+                                try {
+                                    String binanceAPImessage = mapper.writeValueAsString(requestList.get(i-1));
+                                    Mono<Void> send = session.send(Mono.just(session.textMessage(binanceAPImessage)))
+                                            .doOnSuccess(aVoid -> LOGGER.info("Sent: {} (iteration {})", binanceAPImessage, i))
+                                            .doOnError(e -> LOGGER.error("Failed to send message: {}", e.getMessage()));
 
-                    Flux<WebSocketMessage> receive = session.receive()
-                            .doOnNext(message -> LOGGER.info("Received: {}", message.getPayloadAsText()))
-                            .doOnError(e -> LOGGER.error("Failed to receive message: {}", e.getMessage()));
+                                    Flux<WebSocketMessage> receive = session.receive()
+                                            .doOnNext(message -> LOGGER.info("Received: {} (iteration {})", message.getPayloadAsText(), i))
+                                            .doOnError(e -> LOGGER.error("Failed to receive message: {}", e.getMessage()));
 
-                    return send.thenMany(receive).then()
+                                    return send.thenMany(receive).then();
+                                } catch (JsonProcessingException e) {
+                                    return Mono.error(e);
+                                }
+                            });
+
+                    return loop.then()
                             .doFinally(signalType -> {
                                 LOGGER.info("WebSocket session completed with signal: {}", signalType);
                                 sessionRef.set(null);  // Clear the session reference after completion
@@ -69,7 +81,13 @@ public class BinanceAPIWebSocketClient extends AbstractBinanceWebSocketClient {
                 LOGGER.error("Error processing message: {}", e.getMessage());
                 return Mono.error(e);
             }
-        }).then();
+        }).then(disconnect());
+    }
+
+    @Override
+    public Mono<Void> connect() {
+        //No implementation needed
+        return null;
     }
 
     public Mono<Void> disconnect() {

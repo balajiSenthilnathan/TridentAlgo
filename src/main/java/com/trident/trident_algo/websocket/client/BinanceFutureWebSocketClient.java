@@ -11,6 +11,7 @@ import org.springframework.web.reactive.socket.client.ReactorNettyWebSocketClien
 import reactor.core.publisher.Mono;
 
 import java.net.URI;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -33,7 +34,13 @@ public class BinanceFutureWebSocketClient extends AbstractBinanceWebSocketClient
     }
 
     @Override
-    public Mono<Void> connect(Map<String, Object> request) {
+    public Mono<Void> connect(List<Map<String, Object>> request, int step, int spreadPercent) {
+        //No Implementation needed
+        return null;
+    }
+
+    @Override
+    public Mono<Void> connect() {
         return client.execute(URI.create(wssURL), session -> {
             sessionRef.set(session);
             LOGGER.info("Connected to Binance WebSocket! {}", wssURL);
@@ -48,7 +55,7 @@ public class BinanceFutureWebSocketClient extends AbstractBinanceWebSocketClient
         });
     }
 
-    private Mono<Void> handleMessage(WebSocketMessage message) {
+    private void handleMessage(WebSocketMessage message) {
         try {
             LOGGER.debug("Received: {}", message.getPayloadAsText());
             FStreamBinanceResponse response = mapper.readValue(message.getPayloadAsText(), FStreamBinanceResponse.class);
@@ -56,7 +63,6 @@ public class BinanceFutureWebSocketClient extends AbstractBinanceWebSocketClient
         } catch (Exception e) {
             LOGGER.error("Error processing message: {}", e.getMessage());
         }
-        return null;
     }
 
     private void handleError(Throwable throwable) {

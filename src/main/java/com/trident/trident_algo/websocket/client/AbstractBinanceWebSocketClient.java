@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.web.reactive.socket.WebSocketSession;
 import reactor.core.publisher.Mono;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -12,7 +13,9 @@ public abstract class AbstractBinanceWebSocketClient {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AbstractBinanceWebSocketClient.class);
 
-    abstract public Mono<Void> connect(Map<String, Object> request);
+    abstract public Mono<Void> connect(List<Map<String, Object>> requestList, int step, int spreadPercent);
+
+    abstract public Mono<Void> connect();
 
     public Mono<Void> disconnect(AtomicReference<WebSocketSession> sessionRef){
         WebSocketSession session = sessionRef.get();

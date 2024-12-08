@@ -16,6 +16,7 @@ public class BinanceAPIWebSocketRequest {
     private BinanceAPIWebSocketRequestParams params;
     private int spreadPercent;
     private int maxOrdersPerSecond;
+    private int step;
 
 }
 
