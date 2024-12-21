@@ -1,5 +1,6 @@
 package com.trident.trident_algo.api.job;
 
+import com.trident.trident_algo.api.controller.BinanceOrderAPIController;
 import com.trident.trident_algo.api.service.OrderAPIService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,15 +18,20 @@ public class BinanceOrderScheduler {
     private final OrderAPIService binanceService;
 
     @Autowired
+    private BinanceOrderAPIController orderAPIController;
+
+
+    @Autowired
     public BinanceOrderScheduler(OrderAPIService binanceService) {
         this.binanceService = binanceService;
     }
 
-    @Scheduled(fixedRateString="${binance.scheduler.fixedRate:300000}")
+    @Scheduled(fixedRateString = "${binance.scheduler.fixedRate:300000}")
     public void scheduleCloseOldOrders() throws Exception {
-        binanceService.closeTimeoutOrders()
-                .subscribe(result -> LOGGER.debug("Cancel order job called : {}", result),
-                        error -> LOGGER.error("Error occurred during cancel order job : {}", error.getMessage())
-                );
+        binanceService.closeTimeoutOrders().subscribe(result -> {
+            orderAPIController.sendEvent("Order job executed successfully: " + result);
+        }, error -> {
+            orderAPIController.sendEvent("Error occurred during order job: " + error.getMessage());
+        });
     }
 }

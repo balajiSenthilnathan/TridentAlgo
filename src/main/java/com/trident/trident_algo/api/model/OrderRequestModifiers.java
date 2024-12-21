@@ -1,19 +1,17 @@
 package com.trident.trident_algo.api.model;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
-@Getter
-@Setter
+@Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class OrderRequestModifiers {
 
-    private int spreadPercent;
+    private double spreadPercent;
     private int maxOrdersPerSecond;
     private int step;
     private String channel;
+    private String quantityType;
+    private Boolean isHedgeMode;
 
 }

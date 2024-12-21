@@ -29,7 +29,7 @@ public class TridentAlgoApplication implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
-        //if ("true".equals(binanceWebSocketEnabled))
-        //    binanceFutureWebSocketClient.connect().subscribe();
+        if ("true".equals(binanceWebSocketEnabled))
+            binanceFutureWebSocketClient.connect().subscribe();
     }
 }

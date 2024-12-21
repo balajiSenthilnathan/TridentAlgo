@@ -16,6 +16,9 @@ public class CommonServiceHelper {
     @Getter
     private static long timeOut;
 
+    @Getter
+    private static long cutoff;
+
     @Value("${binance.websocket.future.symbol}")
     public void setSymbol(String propertySymbol) {
         symbol = propertySymbol.toUpperCase();
@@ -25,6 +28,13 @@ public class CommonServiceHelper {
     public void setTimeOut(String propertyTimeOut) {
         timeOut = Integer.parseInt(propertyTimeOut);
     }
+
+
+    @Value("${binance.scheduler.price.cutoff:5}")
+    public void setCutoff(String propertyCutoff) {
+        cutoff = Integer.parseInt(propertyCutoff);
+    }
+
 
     @SuppressWarnings("unchecked")
     public static <K, V> Map<K, V> deepCopy(Map<K, V> original) {

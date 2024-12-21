@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
+import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
@@ -18,9 +19,16 @@ public class WebClientConfiguration {
     @Value("${binance.api.key}")
     private String apiKey;
 
+    // Set larger buffer size (e.g., 10MB)
+    ExchangeStrategies exchangeStrategies = ExchangeStrategies.builder()
+            .codecs(configurer -> configurer.defaultCodecs()
+                    .maxInMemorySize(10 * 1024 * 1024)) // Set the buffer size limit to 10 MB
+            .build();
+
     @Bean
     public WebClient webClient() {
         return WebClient.builder()
+                .exchangeStrategies(exchangeStrategies)
                 .baseUrl("https://fapi.binance.com/fapi/v1/")
                 .defaultHeader("X-MBX-APIKEY", apiKey)
                 .filter(handleErrors())
@@ -36,13 +44,6 @@ public class WebClientConfiguration {
                             // You can parse the response body if necessary
                             LOGGER.error("ERR : {}", responseBody);
                             return Mono.error(new RuntimeException("400 Bad Request: " + responseBody));
-                        });
-            }else if(clientResponse.statusCode() == HttpStatus.OK){
-                return clientResponse.bodyToMono(String.class)
-                        .flatMap(responseBody -> {
-                            // You can parse the response body if necessary
-                            LOGGER.debug("200 OK : {}", responseBody);
-                            return Mono.just(clientResponse);
                         });
             }
             return Mono.just(clientResponse); // Continue processing the response if no error
