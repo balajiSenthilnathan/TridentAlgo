@@ -2,7 +2,7 @@ package com.trident.trident_algo.websocket.service;
 
 import com.trident.trident_algo.api.helper.BinanceSignatureHelper;
 import com.trident.trident_algo.api.helper.CommonServiceHelper;
-import com.trident.trident_algo.bot.helper.BinanceAPIBotLogicHelper;
+import com.trident.trident_algo.common.helper.BinanceAPIBotLogicHelper;
 import com.trident.trident_algo.websocket.client.BinanceAPIWebSocketClient;
 import com.trident.trident_algo.websocket.model.BinanceAPIWebSocketRequest;
 import org.slf4j.Logger;

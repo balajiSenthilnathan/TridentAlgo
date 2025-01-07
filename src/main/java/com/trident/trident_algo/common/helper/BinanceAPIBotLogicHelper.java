@@ -1,9 +1,9 @@
-package com.trident.trident_algo.bot.helper;
+package com.trident.trident_algo.common.helper;
 
 import com.trident.trident_algo.common.model.BinanceSymbolPrecision;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
+import org.springframework.util.NumberUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -45,6 +45,12 @@ public class BinanceAPIBotLogicHelper {
         return BigDecimal.valueOf(Double.parseDouble(qtyByUSDT)/Double.parseDouble(price))
                 .setScale(exchangePrecisionMap.get(symbol).getStepAssetPrecision(),
                         RoundingMode.DOWN).toString();
+    }
+
+    public BigDecimal calculateTargetPrice(String orderPrice, Integer deviationValue) {
+        BigDecimal price = NumberUtils.parseNumber(orderPrice, BigDecimal.class);
+        BigDecimal value = NumberUtils.parseNumber(deviationValue.toString(), BigDecimal.class);
+        return price.add(price.multiply(value).divide(BigDecimal.valueOf(100)));
     }
 
 }

@@ -1,5 +1,6 @@
 package com.trident.trident_algo.websocket.config;
 
+import com.binance.connector.client.impl.WebSocketStreamClientImpl;
 import com.trident.trident_algo.websocket.client.BinanceAPIWebSocketClient;
 import com.trident.trident_algo.websocket.client.BinanceFutureWebSocketClient;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -63,5 +64,7 @@ public class BinanceWebSocketConfiguration {
             @Qualifier("binanceAPISession") AtomicReference<WebSocketSession> sessionRef) throws URISyntaxException {
         return new BinanceAPIWebSocketClient(binanceAPIWSSUrl, client, sessionRef);
     }
+
+
 
 }

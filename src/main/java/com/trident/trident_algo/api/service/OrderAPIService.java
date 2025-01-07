@@ -1,5 +1,8 @@
 package com.trident.trident_algo.api.service;
 
+import com.binance.connector.client.impl.WebSocketStreamClientImpl;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.trident.trident_algo.api.helper.BinanceSignatureHelper;
 import com.trident.trident_algo.api.helper.CommonServiceHelper;
 import com.trident.trident_algo.api.helper.OrderValidationHelper;
@@ -7,10 +10,13 @@ import com.trident.trident_algo.api.model.BinanceMarketPriceResponse;
 import com.trident.trident_algo.api.model.BinanceOrderDeleteRequest;
 import com.trident.trident_algo.api.model.BinanceOrderResponse;
 import com.trident.trident_algo.api.model.BinanceOrderRequest;
-import com.trident.trident_algo.bot.helper.BinanceAPIBotLogicHelper;
+import com.trident.trident_algo.common.db.dao.OrderSettingsDAO;
+import com.trident.trident_algo.common.db.entity.OrderSettings;
+import com.trident.trident_algo.common.helper.BinanceAPIBotLogicHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -18,6 +24,7 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -32,10 +39,18 @@ public class OrderAPIService {
 
     private final OrderValidationHelper orderValidationHelper;
 
+    private final OrderSettingsDAO orderSettingsDAO;
+
+    private final WebSocketStreamClientImpl websocketClient;
+
+
     @Autowired
-    public OrderAPIService(BinanceAPIBotLogicHelper binanceAPIBotLogicHelper, com.trident.trident_algo.api.helper.OrderValidationHelper orderValidationHelper) {
+    public OrderAPIService(BinanceAPIBotLogicHelper binanceAPIBotLogicHelper, com.trident.trident_algo.api.helper.OrderValidationHelper orderValidationHelper, OrderSettingsDAO orderSettingsDAO,
+                           @Qualifier("publicWebSocketStream") WebSocketStreamClientImpl websocketClient) {
         this.binanceAPIBotLogicHelper = binanceAPIBotLogicHelper;
         this.orderValidationHelper = orderValidationHelper;
+        this.orderSettingsDAO = orderSettingsDAO;
+        this.websocketClient = websocketClient;
     }
 
     @Autowired
@@ -217,6 +232,27 @@ public class OrderAPIService {
                         Duration.between(startInstant, Instant.now()).toMillis()));
     }
 
+    public Mono<String> deleteOrderReactive(String symbol, String orderId) {
+        Instant startInstant = Instant.now();
+        Map<String, Object> params = new TreeMap<>();
+
+        params.put("symbol", symbol);
+        params.put("orderId", orderId);
+
+        return BinanceSignatureHelper.getHmacSha256SignatureReactive(params, System.currentTimeMillis())
+                .flatMap(signatureComposite -> {
+                    String url = "order?" + signatureComposite.get(1) + "&signature=" + signatureComposite.get(0);
+
+                    return webClient.delete()
+                            .uri(url)
+                            .retrieve()
+                            .bodyToMono(String.class)
+                            .onErrorResume(WebClientResponseException.class, e -> Mono.just(e.getResponseBodyAsString()))
+                            .doOnTerminate(() -> LOGGER.info("Open order {} cancelled in {} ms", orderId,
+                                    Duration.between(startInstant, Instant.now()).toMillis()));
+                });
+    }
+
     public Mono<String> deleteAllOpenOrders(String symbol) throws Exception {
         Instant startInstant = Instant.now();
         List<String> signatureComposite;
@@ -361,5 +397,102 @@ public class OrderAPIService {
                 .doOnTerminate(() -> LOGGER.info("Open positions response fetched in {} ms",
                         Duration.between(startInstant, Instant.now()).toMillis()))
                 .onErrorResume(RuntimeException.class, e -> Mono.just(e.getMessage()));
+    }
+
+    public Mono<String> getApiTradingStatus() throws Exception {
+        Instant startInstant = Instant.now();
+        List<String> signatureComposite;
+        Map<String, Object> params = new HashMap<>();
+
+        signatureComposite = BinanceSignatureHelper.getHmacSha256Signature(params, getServerTime().block());
+        String url = "apiTradingStatus?" + signatureComposite.get(1) + "&signature=" + signatureComposite.get(0);
+
+        return webClient.get()
+                .uri(url)
+                .retrieve()
+                .bodyToMono(String.class)
+                .doOnNext(response -> LOGGER.info("API Tracker status from Binance API: {}", response))
+                .doOnTerminate(() -> LOGGER.info("API Tracker status fetched in {} ms",
+                        Duration.between(startInstant, Instant.now()).toMillis()))
+                .onErrorResume(RuntimeException.class, e -> Mono.just(e.getMessage()));
+    }
+
+    /* ORDER SETTINGS */
+    /* Method to retrieve Bot order settings*/
+    public Mono<OrderSettings> fetchOrderSettings() {
+        return orderSettingsDAO.fetchSettings();
+    }
+
+    /* Method to save Bot order settings*/
+    public Mono<OrderSettings> saveOrUpdateOrderSettings(OrderSettings orderSettings) {
+        return orderSettingsDAO.updateAutoOrderSettings(orderSettings);
+    }
+
+    /* AUTO PLACE/CLOSE ORDER */
+    public Mono<List<BinanceOrderResponse>> placeAndMonitorOrdersWithTargetPrice(
+            List<BinanceOrderRequest> binanceOrderRequests) {
+        LOGGER.info("INSIDE");
+        return placeOrder(binanceOrderRequests) // Call the existing method
+                .flatMapMany(Flux::fromIterable)
+                .doOnNext(orderResponse -> {
+                    // Trigger monitoring asynchronously for each placed order
+                    fetchTargetPriceAndMonitor(orderResponse)
+                            .subscribe(
+                                    null,
+                                    error -> LOGGER.error("Error monitoring order {}: {}", orderResponse.getOrderId(), error.getMessage()),
+                                    () -> LOGGER.info("Monitoring completed for orderId: {}", orderResponse.getOrderId())
+                            );
+                })
+                .collectList(); // Return the placed orders immediately
+    }
+
+    private Mono<BinanceOrderResponse> fetchTargetPriceAndMonitor(BinanceOrderResponse orderResponse) {
+        String symbol = orderResponse.getSymbol();
+
+        return fetchOrderSettings()
+                .map(settings ->
+                        binanceAPIBotLogicHelper.calculateTargetPrice(orderResponse.getPrice(), settings.getDeviationValue()))
+                .flatMap(targetPrice -> monitorPrice(symbol, targetPrice, orderResponse.getOrderId().toString())
+                        .thenReturn(orderResponse)); // Return original response after monitoring
+    }
+
+    private Mono<Void> monitorPrice(String symbol, BigDecimal targetPrice, String orderId) {
+        return Flux.<BigDecimal>create(sink -> {
+                    // Subscribe to the aggregate trade stream for the given symbol
+                    int streamId = websocketClient.aggTradeStream(symbol.toLowerCase(), event -> {
+                        try {
+                            // Parse the JSON string to extract the price
+                            JsonObject jsonObject = JsonParser.parseString(event).getAsJsonObject();
+                            BigDecimal currentPrice = new BigDecimal(jsonObject.get("p").getAsString()); // "p" = price
+
+                            // Log the current market price
+                            System.out.println("Current Market Price for " + symbol + ": " + currentPrice);
+
+                            // Emit the price to the sink
+                            sink.next(currentPrice);
+
+                            // Complete the sink if the target price is reached
+                            if (currentPrice.compareTo(targetPrice) >= 0) {
+                                sink.complete();
+                            }
+                        } catch (Exception e) {
+                            sink.error(e); // Handle parsing or other exceptions
+                        }
+                    });
+
+                    // Handle disposal of the WebSocket connection when the Flux is canceled or completed
+                    sink.onDispose(() -> {
+                        System.out.println("Disposing WebSocket connection for streamId: " + streamId);
+                        websocketClient.closeConnection(streamId);
+                    });
+                })
+                .filter(price -> price.compareTo(targetPrice) >= 0) // Filter for prices meeting the condition
+                .take(1) // Stop after the first matching price
+                .flatMap(price -> deleteOrderReactive(symbol, orderId)) // Delete the order reactively
+                .doOnError(e -> System.err.println("Error in WebSocket stream: " + e.getMessage())) // Log WebSocket errors
+                .doFinally(signalType -> {
+                    System.out.println("WebSocket connection finalized for symbol: " + symbol);
+                })
+                .then();
     }
 }

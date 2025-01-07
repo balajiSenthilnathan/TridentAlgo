@@ -5,10 +5,10 @@ import com.trident.trident_algo.api.model.BinanceOrderDeleteRequest;
 import com.trident.trident_algo.api.model.BinanceOrderResponse;
 import com.trident.trident_algo.api.model.BinanceOrderRequest;
 import com.trident.trident_algo.api.service.OrderAPIService;
+import com.trident.trident_algo.common.db.entity.OrderSettings;
 import com.trident.trident_algo.common.helper.PayloadWrapperHelper;
 import com.trident.trident_algo.common.model.GenericPayloadWrapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -21,6 +21,8 @@ import reactor.core.publisher.Sinks;
 
 import java.util.Collections;
 import java.util.List;
+
+import static com.trident.trident_algo.common.helper.PayloadWrapperHelper.handleResponse;
 
 @RestController
 @Validated
@@ -58,7 +60,7 @@ public class BinanceOrderAPIController {
 
     @PostMapping("/placeOrder")
     public Mono<ResponseEntity<GenericPayloadWrapper<List<BinanceOrderResponse>>>> placeOrder(@RequestBody List<BinanceOrderRequest> binanceOrderRequest) throws Exception {
-        return orderAPIService.placeOrder(binanceOrderRequest)
+        return orderAPIService.placeAndMonitorOrdersWithTargetPrice(binanceOrderRequest)
                 .map(orders -> ResponseEntity.ok(PayloadWrapperHelper.success(orders)))
                 .onErrorResume(e -> Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                         .body(PayloadWrapperHelper.error(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR.value()))));
@@ -110,18 +112,6 @@ public class BinanceOrderAPIController {
         Mono<BinanceMarketPriceResponse> response = orderAPIService.getMarketPriceBySymbol(symbol);
         return ResponseEntity.ok(response);
     }
-    
-    //TEST
-    @GetMapping("/getAllOpenPositions")
-    public ResponseEntity<Mono<String>> getAllOpenOrders() throws Exception {
-        Mono<String> response = orderAPIService.getAllOpenPositions();
-        return ResponseEntity.ok(response);
-    }
-
-    @GetMapping("/health-check")
-    public Mono<ResponseEntity<String>> testApplication() throws Exception {
-        return Mono.just(ResponseEntity.status(200).body("Success"));
-    }
 
     //Server-Sent Events for Timed out Orders
     @GetMapping(value = "/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -132,4 +122,35 @@ public class BinanceOrderAPIController {
     public void sendEvent(String event) {
         sink.tryEmitNext(event);
     }
+
+    /* ORDER SETTINGS */
+    @GetMapping("/settings/fetch")
+    public Mono<ResponseEntity<GenericPayloadWrapper<OrderSettings>>> fetchOrderSettings() throws Exception {
+        return handleResponse(orderAPIService.fetchOrderSettings());
+    }
+
+    @PostMapping("/settings")
+    public Mono<ResponseEntity<GenericPayloadWrapper<OrderSettings>>> saveOrUpdateSettings(@Valid @RequestBody OrderSettings settings) {
+        return handleResponse(orderAPIService.saveOrUpdateOrderSettings(settings));
+    }
+    
+    /* TESTING API methods */
+    @GetMapping("/getAllOpenPositions")
+    public ResponseEntity<Mono<String>> getAllOpenOrders() throws Exception {
+        Mono<String> response = orderAPIService.getAllOpenPositions();
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/api-trading-status")
+    public ResponseEntity<Mono<String>> getApiTradingStatus() throws Exception {
+        Mono<String> response = orderAPIService.getApiTradingStatus();
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/health-check")
+    public Mono<ResponseEntity<String>> testApplication() throws Exception {
+        return Mono.just(ResponseEntity.status(200).body("Success"));
+    }
+
+
 }
